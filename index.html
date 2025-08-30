@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Live Bus Timetable — Demo</title>
+  <style>
+    :root{
+      --bg-top: #ffffff;
+      --bg-bottom: #d7eefc; /* light blue */
+      --accent: #0b72d9;
+      --muted: #6b7280;
+      --card: rgba(255,255,255,0.7);
+      --glass: rgba(255,255,255,0.6);
+      --row-alt: rgba(11,114,217,0.03);
+      font-family: Inter,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;
+    }
+
+    html,body{height:100%;margin:0}
+    body{
+      background: linear-gradient(180deg,var(--bg-top) 0%,var(--bg-bottom) 100%);
+      display:flex;align-items:center;justify-content:center;padding:24px;
+      -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+      color:#0f1724;
+    }
+
+    .wrap{
+      width:100%;max-width:1100px;height:80vh;display:flex;flex-direction:column;gap:12px;
+      box-shadow:0 8px 30px rgba(7,22,45,0.12);border-radius:14px;overflow:hidden;
+    }
+
+    header{
+      padding:18px 22px;background:linear-gradient(180deg, rgba(255,255,255,0.8), rgba(255,255,255,0.6));
+      display:flex;align-items:center;gap:14px;border-bottom:1px solid rgba(11,72,130,0.06);
+    }
+
+    header h1{margin:0;font-size:20px;letter-spacing:0.2px}
+    header .sub{color:var(--muted);font-size:13px}
+
+    .content{
+      display:flex;flex:1;overflow:hidden;
+    }
+
+    /* timetable area */
+    .timetable{
+      flex:1;display:flex;flex-direction:column;padding:12px 12px 0 12px;gap:12px;min-width:420px;
+    }
+
+    .controls{display:flex;gap:8px;align-items:center}
+    .controls input[type=search]{padding:8px 12px;border-radius:8px;border:1px solid rgba(15,23,36,0.06);min-width:160px}
+
+    .table-head{display:grid;grid-template-columns:90px 1fr 110px 120px;align-items:center;padding:8px 12px;font-weight:600;color:var(--accent);font-size:13px}
+    .table-body{flex:1;overflow:auto;border-radius:10px;padding:6px;background:linear-gradient(180deg, rgba(255,255,255,0.45), rgba(255,255,255,0.25));}
+
+    .row{display:grid;grid-template-columns:90px 1fr 110px 120px;align-items:center;padding:10px 12px;border-radius:8px;margin:4px 0}
+    .row:nth-child(even){background:var(--row-alt)}
+    .route{font-weight:700}
+    .dest{color:#082240}
+    .delay{font-weight:700}
+    .sched{color:var(--muted);font-size:13px}
+
+    .live{display:inline-block;padding:6px 8px;border-radius:999px;background:linear-gradient(90deg,#e6f1ff,#d3e9ff);border:1px solid rgba(11,114,217,0.08);font-weight:600}
+    .soon{color:#065f46}
+    .late{color:#b91c1c}
+
+    /* right side - legend / filters */
+    aside{
+      width:280px;padding:12px;background:linear-gradient(180deg, rgba(255,255,255,0.65), rgba(255,255,255,0.4));border-left:1px solid rgba(11,72,130,0.04);
+      display:flex;flex-direction:column;gap:12px
+    }
+    .card{background:var(--glass);border-radius:10px;padding:12px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.4)}
+
+    /* bottom ticker */
+    .ticker-wrap{position:relative;height:54px;border-top:1px solid rgba(11,72,130,0.04);display:flex;align-items:center}
+    .ticker-fade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,rgba(255,255,255,1) 0%,rgba(255,255,255,0) 10%, rgba(255,255,255,0) 90%, rgba(255,255,255,1) 100%)}
+    .ticker{white-space:nowrap;padding:14px 18px;display:inline-block;will-change:transform;animation:marquee 18s linear infinite}
+    .ticker[contenteditable]{outline:none}
+    @keyframes marquee{from{transform:translateX(100%)}to{transform:translateX(-100%)}}
+
+    .ticker-input{display:flex;gap:8px;align-items:center}
+    .ticker-input input{flex:1;padding:8px;border-radius:8px;border:1px solid rgba(15,23,36,0.06)}
+    .btn{padding:8px 10px;border-radius:8px;border:none;background:var(--accent);color:white;font-weight:700;cursor:pointer}
+    .btn[aria-disabled="true"]{opacity:0.5;cursor:not-allowed}
+
+    /* small screens */
+    @media (max-width:900px){
+      .wrap{max-width:980px}
+      aside{display:none}
+      .table-head,.row{grid-template-columns:70px 1fr 90px 90px}
+    }
+
+  </style>
+</head>
+<body>
+  <div class="wrap" role="application">
+    <header>
+      <div style="width:56px;height:56px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#1ea0ff);display:flex;align-items:center;justify-content:center;color:white;font-weight:800">BUS</div>
+      <div>
+        <h1>City Transit — Live Timetable</h1>
+        <div class="sub">Fake live arrivals for demo • Auto-refreshing • Editable ticker below</div>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:10px;align-items:center">
+        <div class="controls">
+          <input id="search" type="search" placeholder="Filter destination or route…" aria-label="Filter timetable">
+          <button class="btn" id="shuffle">Shuffle</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="content">
+      <main class="timetable">
+        <div class="table-head" aria-hidden="true">
+          <div>Route</div>
+          <div>Destination</div>
+          <div>Scheduled</div>
+          <div>Live</div>
+        </div>
+
+        <div id="table" class="table-body" tabindex="0" aria-label="Live timetable">
+          <!-- rows injected by JS -->
+        </div>
+      </main>
+
+      <aside>
+        <div class="card">
+          <strong>Legend</strong>
+          <div style="margin-top:8px;color:var(--muted);font-size:13px">Green: arriving soon • Red: delayed • Blue pill: live status</div>
+        </div>
+
+        <div class="card">
+          <strong>Controls</strong>
+          <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
+            <label style="font-size:13px;color:var(--muted)">Speed</label>
+            <input id="speed" type="range" min="6" max="30" value="18">
+            <small class="sub">Ticker speed (seconds per loop)</small>
+          </div>
+        </div>
+
+        <div class="card">
+          <strong>About</strong>
+          <div style="margin-top:8px;color:var(--muted);font-size:13px">This is a demo timetable with synthetic arrivals — use the search box to filter or the shuffle button to refresh data.</div>
+        </div>
+      </aside>
+    </div>
+
+    <div class="ticker-wrap">
+      <div class="ticker" id="ticker" contenteditable="true" aria-label="Editable scrolling notice">Welcome to City Transit — this ticker is editable. Double-click or type to change, then press Save.</div>
+      <div class="ticker-fade"></div>
+
+      <div style="position:absolute;right:12px;top:8px;display:flex;gap:8px;align-items:center">
+        <div class="ticker-input">
+          <input id="tickerText" placeholder="Edit ticker text…">
+          <button id="saveTicker" class="btn">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- data generation ---
+    const routes = ['1A','2','2X','3B','4','5','6','7A','8','9','10','12','15','20X','21','24','27','30','44','50'];
+    const destinations = [
+      'Central Station','North Park','Lakeside','University','East End','Harbour','Old Town','Riverfront','Airport','Hilltop','Market Street','Westfield','Stadium','Museum','Industrial Park'
+    ];
+
+    function pad(n){return String(n).padStart(2,'0')}
+
+    // create a long list of upcoming departures (e.g. 200 entries)
+    function generateTimetable(count=200){
+      const now = Date.now();
+      const rows = [];
+      for(let i=0;i<count;i++){
+        const route = routes[Math.floor(Math.random()*routes.length)];
+        const dest = destinations[Math.floor(Math.random()*destinations.length)];
+        // scheduled time within next 24 hours
+        const minutesAhead = Math.floor(Math.random()*24*60);
+        const sched = new Date(now + minutesAhead*60000 + Math.floor(Math.random()*60000));
+        // determine a small random live offset (-3 to +8 mins)
+        const offset = Math.floor(Math.random()*12)-3; // -3..8
+        rows.push({id:i,route,dest,sched: sched.getTime(), offset});
+      }
+      // sort by scheduled time (soonest first)
+      rows.sort((a,b)=>a.sched-b.sched);
+      return rows;
+    }
+
+    let timetable = generateTimetable(300);
+
+    // --- DOM render ---
+    const table = document.getElementById('table');
+    function renderRows(filter=''){
+      table.innerHTML = '';
+      const frag = document.createDocumentFragment();
+      const now = Date.now();
+      timetable.forEach((r, idx)=>{
+        if(filter){
+          const f = filter.toLowerCase();
+          if(!(r.dest.toLowerCase().includes(f) || r.route.toLowerCase().includes(f))) return;
+        }
+        const row = document.createElement('div');
+        row.className = 'row';
+        const schedDate = new Date(r.sched);
+        const schedStr = pad(schedDate.getHours())+':'+pad(schedDate.getMinutes());
+
+        const liveTime = new Date(r.sched + (r.offset*60000));
+        const liveDelta = Math.round((r.sched + r.offset*60000 - now)/60000);
+
+        row.innerHTML = `
+          <div class="route">${r.route}</div>
+          <div>
+            <div class="dest">${r.dest}</div>
+            <div class="sched">${schedStr}</div>
+          </div>
+          <div class="sched">${schedDate.toLocaleDateString(undefined,{month:'short',day:'numeric'})}</div>
+          <div>
+            <div class="live">${liveDelta<=0?'<span class="soon">Arr</span>': liveDelta+' min'}</div>
+            <div class="sched" style="margin-top:6px">${r.offset>=5?'<span class="late">+'+r.offset+' min</span>':(r.offset<=-1?'<span class="soon">-'+Math.abs(r.offset)+' min</span>':'on time')}</div>
+          </div>
+        `;
+        frag.appendChild(row);
+      });
+      table.appendChild(frag);
+    }
+
+    renderRows();
+
+    // --- live updates: randomly vary offsets over time and update live column ---
+    function tick(){
+      const now = Date.now();
+      // small random walk of offsets
+      for(let i=0;i<Math.min(timetable.length, 300); i++){
+        if(Math.random()<0.08){ // 8% chance to change this entry a little
+          timetable[i].offset += Math.floor(Math.random()*3)-1; // -1,0,1
+          if(timetable[i].offset < -5) timetable[i].offset = -5;
+          if(timetable[i].offset > 20) timetable[i].offset = 20;
+        }
+      }
+      // re-render only live parts by re-creating rows for simplicity
+      renderRows(document.getElementById('search').value);
+    }
+    // update every 7 seconds to give a 'live' feel
+    setInterval(tick, 7000);
+
+    // update countdowns every 30s for reduced CPU
+    setInterval(()=>renderRows(document.getElementById('search').value), 30000);
+
+    // search filter
+    document.getElementById('search').addEventListener('input', (e)=>renderRows(e.target.value));
+
+    // shuffle button - regenerate data
+    document.getElementById('shuffle').addEventListener('click', ()=>{
+      timetable = generateTimetable(300);
+      renderRows(document.getElementById('search').value);
+      // gently focus top
+      table.scrollTop = 0;
+    });
+
+    // Ticker behaviour - editable and persistent
+    const ticker = document.getElementById('ticker');
+    const tickerText = document.getElementById('tickerText');
+    const saveTicker = document.getElementById('saveTicker');
+    const speed = document.getElementById('speed');
+
+    function loadTicker(){
+      const saved = localStorage.getItem('busTicker');
+      if(saved){
+        ticker.textContent = saved;
+      }
+      tickerText.value = ticker.textContent;
+    }
+    loadTicker();
+
+    saveTicker.addEventListener('click', ()=>{
+      const text = tickerText.value.trim() || 'Welcome to City Transit';
+      ticker.textContent = text;
+      localStorage.setItem('busTicker', text);
+      // restart CSS animation (update speed via var)
+      restartMarquee();
+    });
+
+    // allow double-click to edit directly
+    ticker.addEventListener('dblclick', ()=>{
+      ticker.contentEditable = true; ticker.focus();
+    });
+    ticker.addEventListener('blur', ()=>{
+      ticker.contentEditable = false; localStorage.setItem('busTicker', ticker.textContent.trim()); tickerText.value = ticker.textContent.trim();
+    });
+
+    function restartMarquee(){
+      const s = Number(speed.value) || 18;
+      ticker.style.animationDuration = s + 's';
+      // reflow to restart animation
+      ticker.style.animation = 'none';
+      void ticker.offsetWidth;
+      ticker.style.animation = '';
+    }
+
+    speed.addEventListener('input', restartMarquee);
+    restartMarquee();
+
+    // small accessibility: keyboard shortcut to focus search
+    document.addEventListener('keydown', (e)=>{
+      if((e.ctrlKey||e.metaKey) && e.key === 'f'){
+        e.preventDefault();document.getElementById('search').focus();
+      }
+    });
+
+    // initial quick auto-scroll to show variety
+    table.scrollTop = 0;
+
+    // keep memory small: if extremely long list, limit displayed items for performance
+    // (we generate 300, but only show filtered results; if you want virtualization, ask and I'll add it.)
+
+  </script>
+</body>
+</html>
